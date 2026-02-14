@@ -1,0 +1,5 @@
+include README.md
+include LICENSE
+include pyproject.toml
+recursive-include nexus_sdk *.py
+recursive-include examples *.py

@@ -1,0 +1,115 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1771111904007,
+  "projectRoot": "/Users/garretteaglin/Projects/nexus/packages/nexus-sdk",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "pyproject.toml"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "pytest",
+        "version": null,
+        "category": "testing"
+      }
+    ],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": "pytest",
+    "lintCommand": "ruff check",
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "examples"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "examples": {
+      "path": "examples",
+      "purpose": "Example code",
+      "fileCount": 2,
+      "lastAccessed": 1771111903997,
+      "keyFiles": [
+        "basic_usage.py",
+        "cost_tracking.py"
+      ]
+    },
+    "nexus_agent_sdk.egg-info": {
+      "path": "nexus_agent_sdk.egg-info",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1771111903997,
+      "keyFiles": [
+        "PKG-INFO",
+        "SOURCES.txt",
+        "dependency_links.txt",
+        "requires.txt",
+        "top_level.txt"
+      ]
+    },
+    "nexus_sdk": {
+      "path": "nexus_sdk",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1771111903998,
+      "keyFiles": [
+        "__init__.py",
+        "config.py",
+        "py.typed",
+        "types.py"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "examples/provider_swap.py",
+      "accessCount": 2,
+      "lastAccessed": 1771112167569,
+      "type": "file"
+    },
+    {
+      "path": "nexus_sdk/cost/budget.py",
+      "accessCount": 2,
+      "lastAccessed": 1771112193509,
+      "type": "file"
+    },
+    {
+      "path": "examples/custom_provider.py",
+      "accessCount": 1,
+      "lastAccessed": 1771112161649,
+      "type": "file"
+    },
+    {
+      "path": "nexus_sdk/agents/registry.py",
+      "accessCount": 1,
+      "lastAccessed": 1771112169238,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
