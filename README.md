@@ -218,7 +218,7 @@ from nexus_sdk import get_team_names
 
 team = get_team_names(["vp_engineering", "senior_engineer", "qa_lead"])
 # {
-#     "vp_engineering": {"name": "Sarah Chen", "pronouns": "she/her"},
+#     "vp_engineering": {"name": "Marcus Johnson", "pronouns": "he/him"},
 #     "senior_engineer": {"name": "Alex Kim", "pronouns": "they/them"},
 #     "qa_lead": {"name": "Priya Gupta", "pronouns": "she/her"}
 # }

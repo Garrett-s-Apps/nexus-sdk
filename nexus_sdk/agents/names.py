@@ -9,10 +9,10 @@ import random
 # Agent names organized by role
 AGENT_NAMES = {
     "vp_engineering": [
-        {"name": "Sarah Chen", "pronouns": "she/her"},
         {"name": "Marcus Johnson", "pronouns": "he/him"},
         {"name": "Priya Patel", "pronouns": "she/her"},
         {"name": "James Rodriguez", "pronouns": "he/him"},
+        {"name": "Sarah Chen", "pronouns": "she/her"},
     ],
     "senior_engineer": [
         {"name": "Alex Kim", "pronouns": "they/them"},
@@ -99,7 +99,7 @@ def get_team_names(roles: list[str], seed: int | None = None) -> dict[str, dict[
     Example:
         >>> get_team_names(["vp_engineering", "senior_engineer", "qa_lead"])
         {
-            "vp_engineering": {"name": "Sarah Chen", "pronouns": "she/her"},
+            "vp_engineering": {"name": "Marcus Johnson", "pronouns": "he/him"},
             "senior_engineer": {"name": "Alex Kim", "pronouns": "they/them"},
             "qa_lead": {"name": "Priya Gupta", "pronouns": "she/her"}
         }
