@@ -52,9 +52,9 @@ AGENT_NAMES = {
         {"name": "Dr. Sam Lee", "pronouns": "they/them"},
     ],
     "product_manager": [
-        {"name": "Jessica Wright", "pronouns": "she/her"},
         {"name": "Omar Khan", "pronouns": "he/him"},
         {"name": "Casey Thompson", "pronouns": "they/them"},
+        {"name": "Jessica Wright", "pronouns": "she/her"},
     ],
     "designer": [
         {"name": "Luna Morales", "pronouns": "she/her"},
