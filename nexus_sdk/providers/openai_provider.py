@@ -5,7 +5,7 @@ OpenAI provider for NEXUS SDK.
 import time
 from typing import Any
 
-from nexus_sdk.providers.base import ModelProvider
+from nexus_sdk.providers.base import ModelProvider, _sanitize_error
 from nexus_sdk.types import TaskResult
 
 # Model tier mapping (for tier-based routing)
@@ -34,10 +34,16 @@ class OpenAIProvider(ModelProvider):
             timeout: Request timeout in seconds
             max_retries: Maximum retry attempts
         """
-        self.api_key = api_key
+        self._api_key = api_key
         self.timeout = timeout
         self.max_retries = max_retries
         self._client: Any = None
+
+    def __repr__(self) -> str:
+        return f"OpenAIProvider(api_key='***', timeout={self.timeout})"
+
+    def __getstate__(self) -> dict:
+        raise TypeError("Provider objects containing API keys cannot be serialized")
 
     def _get_client(self) -> Any:
         """Lazy-load OpenAI client (only when needed)."""
@@ -46,7 +52,7 @@ class OpenAIProvider(ModelProvider):
                 from openai import OpenAI
 
                 self._client = OpenAI(
-                    api_key=self.api_key,
+                    api_key=self._api_key,
                     timeout=self.timeout,
                     max_retries=self.max_retries,
                 )
@@ -121,7 +127,7 @@ class OpenAIProvider(ModelProvider):
                 status="error",
                 output="",
                 error_type="api_error",
-                error_detail=str(e),
+                error_detail=_sanitize_error(e),
                 elapsed_seconds=elapsed,
                 model=actual_model,
             )

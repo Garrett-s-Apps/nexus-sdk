@@ -15,6 +15,9 @@ class SQLiteCostStorage:
 
         Args:
             db_path: Path to SQLite database file
+
+        Note: This database is NOT encrypted at rest. If your threat model
+        requires encryption, use pysqlcipher3 or full-disk encryption.
         """
         self.db_path = os.path.expanduser(db_path)
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)

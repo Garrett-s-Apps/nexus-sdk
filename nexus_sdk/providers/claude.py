@@ -5,7 +5,7 @@ Claude provider for NEXUS SDK using Anthropic API.
 import time
 from typing import Any
 
-from nexus_sdk.providers.base import ModelProvider
+from nexus_sdk.providers.base import ModelProvider, _sanitize_error
 from nexus_sdk.types import TaskResult
 
 # Model tier mapping
@@ -38,10 +38,16 @@ class ClaudeProvider(ModelProvider):
             timeout: Request timeout in seconds
             max_retries: Maximum retry attempts
         """
-        self.api_key = api_key
+        self._api_key = api_key
         self.timeout = timeout
         self.max_retries = max_retries
         self._client: Any = None
+
+    def __repr__(self) -> str:
+        return f"ClaudeProvider(api_key='***', timeout={self.timeout})"
+
+    def __getstate__(self) -> dict:
+        raise TypeError("Provider objects containing API keys cannot be serialized")
 
     def _get_client(self) -> Any:
         """Lazy-load Anthropic client (only when needed)."""
@@ -50,7 +56,7 @@ class ClaudeProvider(ModelProvider):
                 from anthropic import Anthropic
 
                 self._client = Anthropic(
-                    api_key=self.api_key,
+                    api_key=self._api_key,
                     timeout=self.timeout,
                     max_retries=self.max_retries,
                 )
@@ -125,7 +131,7 @@ class ClaudeProvider(ModelProvider):
                 status="error",
                 output="",
                 error_type="api_error",
-                error_detail=str(e),
+                error_detail=_sanitize_error(e),
                 elapsed_seconds=elapsed,
                 model=actual_model,
             )

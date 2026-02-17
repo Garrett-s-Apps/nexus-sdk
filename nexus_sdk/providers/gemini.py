@@ -5,7 +5,7 @@ Gemini provider for NEXUS SDK using LangChain integration.
 import time
 from typing import Any
 
-from nexus_sdk.providers.base import ModelProvider
+from nexus_sdk.providers.base import ModelProvider, _sanitize_error
 from nexus_sdk.types import TaskResult
 
 # Model tier mapping
@@ -33,10 +33,16 @@ class GeminiProvider(ModelProvider):
             timeout: Request timeout in seconds
             max_retries: Maximum retry attempts
         """
-        self.api_key = api_key
+        self._api_key = api_key
         self.timeout = timeout
         self.max_retries = max_retries
         self._llm: Any = None
+
+    def __repr__(self) -> str:
+        return f"GeminiProvider(api_key='***', timeout={self.timeout})"
+
+    def __getstate__(self) -> dict:
+        raise TypeError("Provider objects containing API keys cannot be serialized")
 
     def _get_llm(self, model: str) -> Any:
         """Lazy-load Gemini LLM via LangChain."""
@@ -46,7 +52,7 @@ class GeminiProvider(ModelProvider):
 
                 self._llm = ChatGoogleGenerativeAI(
                     model=model,
-                    google_api_key=self.api_key,
+                    google_api_key=self._api_key,
                     timeout=self.timeout,
                     max_retries=self.max_retries,
                 )
@@ -120,7 +126,7 @@ class GeminiProvider(ModelProvider):
                 status="error",
                 output="",
                 error_type="api_error",
-                error_detail=str(e),
+                error_detail=_sanitize_error(e),
                 elapsed_seconds=elapsed,
                 model=actual_model,
             )

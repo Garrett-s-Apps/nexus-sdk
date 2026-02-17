@@ -4,9 +4,24 @@ Base provider interface for NEXUS SDK.
 All AI providers must implement this interface.
 """
 
+import re
 from abc import ABC, abstractmethod
 
 from nexus_sdk.types import TaskResult
+
+
+def _sanitize_error(error: Exception) -> str:
+    """Remove potential secrets from error messages before storing."""
+    msg = str(error)
+    # Redact API keys (Anthropic sk-ant-, OpenAI sk-, Google AI AIza)
+    msg = re.sub(r'(sk-ant-[a-zA-Z0-9_-]{10,})', '[REDACTED_KEY]', msg)
+    msg = re.sub(r'(sk-[a-zA-Z0-9]{20,})', '[REDACTED_KEY]', msg)
+    msg = re.sub(r'(AIza[a-zA-Z0-9_-]{30,})', '[REDACTED_KEY]', msg)
+    # Redact Bearer tokens
+    msg = re.sub(r'(Bearer\s+)[a-zA-Z0-9._-]+', r'\1[REDACTED]', msg)
+    # Redact generic api_key/api-key patterns in URLs or JSON
+    msg = re.sub(r'(api[_-]?key["\s:=]+)[^\s,}"\']+', r'\1[REDACTED]', msg, flags=re.IGNORECASE)
+    return msg[:500]
 
 
 class ModelProvider(ABC):

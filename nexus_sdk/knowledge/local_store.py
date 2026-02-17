@@ -51,7 +51,13 @@ class LocalKnowledgeStore:
         return self._conn
 
     def init(self) -> None:
-        """Initialize the database. Must be called before any operations."""
+        """Initialize the database. Must be called before any operations.
+
+        Note: This database is NOT encrypted at rest. The main NEXUS server
+        uses SQLCipher with NEXUS_MASTER_SECRET for encryption. If your
+        threat model requires encryption at rest for the local knowledge
+        store, use pysqlcipher3 or full-disk encryption.
+        """
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
@@ -149,6 +155,8 @@ class LocalKnowledgeStore:
             conditions.append("created_at > ?")
             params.append(cutoff)
 
+        # SECURITY: All conditions use ? placeholders — never interpolate user
+        # values directly into the condition strings.
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         params.append(float(limit))
         rows = self._db.execute(

@@ -10,10 +10,13 @@ can use this client from any Python application.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import warnings
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger("nexus_sdk.client")
@@ -39,15 +42,29 @@ class NexusClient:
         self.session_token = session_token
         self.timeout = timeout
 
-    def authenticate(self, passphrase: str) -> bool:
+        # Warn if using plaintext HTTP to a non-localhost server
+        parsed = urlparse(self.base_url)
+        is_local = parsed.hostname in ("localhost", "127.0.0.1", "::1")
+        if parsed.scheme == "http" and not is_local:
+            warnings.warn(
+                f"NexusClient is using plaintext HTTP to a remote host ({parsed.hostname}). "
+                "Credentials will be sent unencrypted. Use https:// for production.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    def authenticate(self, passphrase: str, pre_hashed: bool = False) -> bool:
         """Authenticate with the NEXUS server.
 
         Args:
             passphrase: The NEXUS dashboard passphrase (plain or pre-hashed)
+            pre_hashed: If True, passphrase is already SHA-256 hashed
 
         Returns:
             True if authentication succeeded
         """
+        if not pre_hashed:
+            passphrase = hashlib.sha256(passphrase.encode()).hexdigest()
         data = self._post("/auth/login", {"passphrase": passphrase})
         if data and data.get("ok"):
             self.session_token = data.get("token", "")
@@ -70,7 +87,7 @@ class NexusClient:
                 raw: dict[str, Any] = json.loads(resp.read().decode())
                 return raw
         except (HTTPError, URLError, json.JSONDecodeError) as e:
-            logger.error("GET %s failed: %s", path, e)
+            logger.error("GET %s failed: %s", path, type(e).__name__)
             return {}
 
     def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -83,7 +100,7 @@ class NexusClient:
                 raw: dict[str, Any] = json.loads(resp.read().decode())
                 return raw
         except (HTTPError, URLError, json.JSONDecodeError) as e:
-            logger.error("POST %s failed: %s", path, e)
+            logger.error("POST %s failed: %s", path, type(e).__name__)
             return {}
 
     # -- Knowledge Search --
