@@ -1,173 +1,199 @@
 # Spec: NEXUS SDK Knowledge Module
 
-**Version:** 1.0
+**Version:** 2.0
 **Date:** 2026-02-17
 **Status:** Implemented
-**Affects:** nexus-sdk (v0.2.0)
-**Dependencies:** nexus server (localhost:4200 with RAG endpoints)
+**Affects:** nexus-sdk (v0.3.0)
+**Dependencies:** None (local-first mode) | nexus server localhost:4200 (server-backed mode)
 
 ## Summary
 
-Add a `knowledge/` module to the NEXUS SDK that provides programmatic access to semantic search and debug investigation capabilities. This enables anyone to use NEXUS's RAG knowledge base from any Python application — no Claude Code required.
+The `knowledge/` module provides two modes of operation:
+
+1. **Local-first** (recommended): Per-user SQLite knowledge store with embedded semantic search. No server required. Each user's knowledge base lives at `~/.nexus/knowledge.db` and only learns from that user's projects.
+2. **Server-backed**: HTTP client to a running NEXUS server instance for shared organizational knowledge.
 
 ## Motivation
 
-The NEXUS SDK's purpose is to operate NEXUS without Claude Code. Before this change, the SDK provided:
-- Agent registry with provider-agnostic execution (Claude/OpenAI/Gemini)
-- Cost tracking and budget enforcement
+The NEXUS SDK's purpose is to operate NEXUS without Claude Code. v0.2.0 added server-backed knowledge search, but this still required a running NEXUS server. v0.3.0 adds fully offline, local-first knowledge storage so any Python application can build and search its own institutional memory — no server, no shared state, no cloud egress.
 
-But it was missing access to NEXUS's most valuable capability: institutional memory. The RAG knowledge base, semantic search, and debug investigation were only accessible through the nexus-plugin (Claude Code) or direct Python imports (server-side only).
-
-With this change, any Python application can:
-1. Search past errors, task outcomes, code changes, and conversations
-2. Run semantic debug investigations with proven-fix detection
-3. Check knowledge base health and status
+Key design principle: **each user's RAG and ML store is local and only learns from that user's projects**.
 
 ## Module Structure
 
 ```
 nexus_sdk/knowledge/
-├── __init__.py     — exports NexusClient, KnowledgeSearch, DebugInvestigator
-├── types.py        — KnowledgeChunk, SearchResult, DebugReport, KnowledgeStatus
-├── client.py       — NexusClient: HTTP client wrapping NEXUS server API
-├── search.py       — KnowledgeSearch: typed wrapper for semantic search
-└── debug.py        — DebugInvestigator: typed wrapper for debug investigation
+├── __init__.py         — exports all public classes (local-first + server-backed)
+├── embeddings.py       — local embedding generation (sentence-transformers → TF-IDF → hash)
+├── local_store.py      — LocalKnowledgeStore: per-user SQLite with retention policies
+├── local_search.py     — LocalKnowledgeSearch + LocalDebugInvestigator (fully offline)
+├── types.py            — KnowledgeChunk, SearchResult, DebugReport, KnowledgeStatus
+├── client.py           — NexusClient: HTTP client wrapping NEXUS server API
+├── search.py           — KnowledgeSearch: server-backed typed wrapper
+└── debug.py            — DebugInvestigator: server-backed typed wrapper
 ```
+
+## Local-First Architecture
+
+### Embedding Tiers
+
+The SDK detects the best available embedding backend at import time:
+
+| Tier | Backend | Quality | Requirement |
+|------|---------|---------|-------------|
+| 1 | sentence-transformers (all-MiniLM-L6-v2) | Best | `pip install sentence-transformers` |
+| 2 | scikit-learn TF-IDF | Good | `pip install scikit-learn` |
+| 3 | Deterministic hash | Deduplication only | None (stdlib) |
+
+All tiers produce 384-dim float32 vectors. Serialization uses `struct.pack`/`struct.unpack` for safe, deterministic binary encoding (no unsafe deserialization).
+
+### Knowledge Chunk Types
+
+| Type | Retention | Weight | Description |
+|------|-----------|--------|-------------|
+| error_resolution | Permanent | 1.3x | Past errors and their fixes — never repeat mistakes |
+| task_outcome | 90 days | 1.1x | Completed task results |
+| directive_summary | 90 days | 1.0x | Summarized directives |
+| conversation | 30 days | 1.0x | Conversation context |
+| code_change | 30 days | 0.9x | Code modifications |
+
+### Storage
+
+- Database: `~/.nexus/knowledge.db` (configurable)
+- Engine: SQLite with WAL mode and 5s busy timeout
+- Isolation: Per-user, per-project filtering via `project` column
+- Deduplication: UNIQUE constraint on `source_id` with upsert
+- Domain classification: Auto-detected from content keywords (frontend, backend, devops, security, testing)
 
 ## Types
 
-### KnowledgeChunk
-A single knowledge chunk from the RAG store.
+### LocalChunk
+A knowledge chunk with similarity score from local search.
 
 | Field | Type | Description |
 |-------|------|-------------|
+| chunk_type | str | error_resolution, task_outcome, etc. |
 | content | str | Chunk text content |
-| chunk_type | str | error_resolution, task_outcome, conversation, code_change |
 | source_id | str | Unique source identifier |
-| score | float | Weighted similarity score |
-| raw_similarity | float | Raw cosine similarity |
-| metadata | dict | Additional metadata (agent, cost, files, etc.) |
+| domain_tag | str | Auto-classified domain |
+| project | str | Project identifier |
+| similarity | float | Raw cosine similarity |
+| score | float (property) | Weighted score (type weight x recency boost) |
 
-### SearchResult
-Result of a semantic search query.
+### LocalSearchResult
 
 | Field | Type | Description |
 |-------|------|-------------|
+| results | list[LocalChunk] | Ranked results |
 | query | str | Original search query |
 | mode | str | Search mode used |
-| results | list[KnowledgeChunk] | Ranked results |
-| count | int | Number of results |
+| count | int (property) | Number of results |
 | has_results | bool (property) | True if count > 0 |
-| top_match | KnowledgeChunk? (property) | Highest-scoring result |
 
-### DebugReport
-Result of a semantic debug investigation.
+### LocalDebugReport
 
 | Field | Type | Description |
 |-------|------|-------------|
-| error | str | Error description |
-| file_path | str | Affected file |
-| domain | str | Domain classification |
-| past_errors | list[KnowledgeChunk] | Similar past errors |
-| related_tasks | list[KnowledgeChunk] | Related task outcomes |
-| recent_code_changes | list[KnowledgeChunk] | Recent code changes |
-| directive_analysis | dict | Directive similarity analysis |
-| has_proven_fix | bool | True if match >= 70% |
-| proven_fix | KnowledgeChunk? | Highest-confidence past fix |
-| risk_level | str (property) | Risk from directive analysis |
+| past_errors | list[LocalChunk] | Similar past errors |
+| related_tasks | list[LocalChunk] | Related task outcomes |
+| code_changes | list[LocalChunk] | Related code changes |
+| proven_fix | LocalChunk? | Highest-confidence past fix |
+| has_proven_fix | bool (property) | True if match >= 70% |
 | summary() | str (method) | Human-readable summary |
 
-### KnowledgeStatus
-RAG knowledge base status.
+### Server-Backed Types
 
-| Field | Type | Description |
-|-------|------|-------------|
-| total_chunks | int | Total chunks stored |
-| by_type | dict[str, int] | Counts per chunk type |
-| ready | bool | True if knowledge base is operational |
-
-## NexusClient
-
-HTTP client wrapping the NEXUS server API using only stdlib (`urllib`). No external HTTP dependencies required.
-
-**Authentication:**
-```python
-client = NexusClient(base_url="http://localhost:4200")
-client.authenticate("my-passphrase")
-```
-
-**Methods:**
-| Method | Endpoint | Returns |
-|--------|----------|---------|
-| `search()` | POST /ml/rag/search | dict (raw) |
-| `debug()` | POST /ml/debug | dict (raw) |
-| `knowledge_status()` | GET /ml/rag/status | dict (raw) |
-| `send_message()` | POST /message | dict |
-| `health()` | GET /health | dict |
-| `get_state()` | GET /state | dict |
-| `get_agents()` | GET /agents | dict |
-| `get_cost()` | GET /cost | dict |
-| `ml_status()` | GET /ml/status | dict |
-| `find_similar()` | POST /ml/similar | dict |
+KnowledgeChunk, SearchResult, DebugReport, KnowledgeStatus remain unchanged from v0.2.0 for server-backed usage.
 
 ## Usage Patterns
 
-### Standalone Python Script
+### Local-First (No Server Required)
+
+```python
+from nexus_sdk import LocalKnowledgeSearch, LocalDebugInvestigator
+
+# Initialize local knowledge store
+search = LocalKnowledgeSearch()  # uses ~/.nexus/knowledge.db
+search.init()
+
+# Ingest knowledge from your project
+search.ingest_error(
+    "Fix: JWT token refresh needs 30s timeout to prevent race condition",
+    source_id="err-jwt-timeout",
+    project="my-api",
+)
+search.ingest_task(
+    "Implemented rate limiter with sliding window algorithm",
+    source_id="task-rate-limiter",
+    project="my-api",
+)
+
+# Search your local knowledge
+result = search.errors("JWT token failing")
+for chunk in result.results:
+    print(f"[{chunk.similarity:.0%}] {chunk.content[:80]}")
+
+# Debug investigation
+debugger = LocalDebugInvestigator()
+debugger.init()
+report = debugger.investigate("JWT refresh token failing with timeout")
+if report.has_proven_fix:
+    print(f"Apply proven fix: {report.proven_fix.content}")
+
+# Maintenance
+search.prune()  # remove expired chunks per retention policy
+search.close()
+```
+
+### CI/CD Integration
+
+```python
+debugger = LocalDebugInvestigator()
+debugger.init()
+if debugger.quick_check(error_from_test_suite):
+    print("Known issue — check local knowledge base for resolution")
+debugger.close()
+```
+
+### Server-Backed (Requires NEXUS Server)
+
 ```python
 from nexus_sdk import NexusClient, KnowledgeSearch, DebugInvestigator
 
-client = NexusClient()
+client = NexusClient(base_url="http://localhost:4200")
 client.authenticate(os.environ["NEXUS_PASSPHRASE"])
 search = KnowledgeSearch(client)
 debugger = DebugInvestigator(client)
 
-# Search past errors
 result = search.errors("timeout connecting to database")
-if result.has_results:
-    print(f"Found {result.count} similar past errors")
-
-# Debug investigation
 report = debugger.investigate("API returning 500 on /users endpoint")
-if report.has_proven_fix:
-    print(f"Apply proven fix: {report.proven_fix.content}")
-```
-
-### CI/CD Integration
-```python
-# Pre-flight check: has this error been solved before?
-if debugger.quick_check(error_from_test_suite):
-    print("Known issue — check knowledge base for resolution")
-```
-
-### Custom Dashboard
-```python
-# Expose knowledge base metrics
-status = search.status()
-dashboard_data = {
-    "total_knowledge": status.total_chunks,
-    "error_resolutions": status.by_type.get("error_resolution", 0),
-    "ready": status.ready,
-}
 ```
 
 ## Design Decisions
 
-1. **stdlib-only HTTP** — Uses `urllib` instead of `requests`/`httpx` to avoid adding dependencies to the SDK. The SDK should be zero-dependency beyond pydantic-settings (already required for config).
+1. **Local-first by default** — Users should not need a running server to benefit from institutional memory. The SDK stores knowledge in their own SQLite database, isolated per user and per project.
 
-2. **Raw + Typed layers** — `NexusClient` returns raw dicts for flexibility. `KnowledgeSearch` and `DebugInvestigator` return typed dataclasses for developer ergonomics. Consumers choose their preferred abstraction level.
+2. **Safe serialization** — Embedding vectors are serialized with `struct.pack`/`struct.unpack` (fixed-format binary), avoiding unsafe deserialization patterns entirely. Produces deterministic 1536-byte BLOBs.
 
-3. **No async** — The client uses synchronous `urllib` to match the simplest use case (scripts, notebooks, CI). Async support can be added later with `aiohttp` if needed.
+3. **Tiered embeddings** — Graceful degradation from sentence-transformers (best quality) through TF-IDF (decent) to hash (always works). Users get the best quality their environment supports without configuration.
 
-4. **Dataclasses over Pydantic** — Knowledge types use stdlib dataclasses to avoid coupling the types layer to pydantic. The config layer already uses pydantic-settings, but types should be portable.
+4. **Retention policies** — Error resolutions are permanent (never repeat mistakes). Other types expire based on utility half-life. `prune()` enforces these policies.
 
-## Exports (v0.2.0)
+5. **Domain auto-classification** — Content is automatically tagged with domain (frontend, backend, devops, security, testing) based on keyword matching, enabling filtered searches without manual tagging.
+
+6. **No data sharing** — Each user's knowledge base is completely isolated. No data is sent to external services, no state is shared between users. This is a foundational architectural decision.
+
+## Exports (v0.3.0)
 
 ```python
 from nexus_sdk import (
     # Existing (v0.1.0)
     NexusConfig, TaskResult, Decision, AgentConfig,
     AgentRegistry, Agent, get_agent_name, get_team_names,
-    # New (v0.2.0)
+    # Local-first knowledge (v0.3.0)
+    LocalKnowledgeStore, LocalKnowledgeSearch, LocalDebugInvestigator,
+    LocalChunk, LocalSearchResult, LocalDebugReport,
+    # Server-backed knowledge (v0.2.0)
     NexusClient, KnowledgeSearch, DebugInvestigator,
     SearchResult, DebugReport, KnowledgeChunk, KnowledgeStatus,
 )
